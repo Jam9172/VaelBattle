@@ -1,0 +1,12 @@
+{
+  "name": "vael-battle",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Vael Battle, a SillyTavern extension",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
+  }
+}
