@@ -114,7 +114,10 @@ window.addEventListener('keyup', ev => battleKeys(ev, onKeyUp), true);
 function findEnemy(name) {
   const k = name.trim().toLowerCase();
   if (ENEMIES[k]) return ENEMIES[k];
-  const hit = Object.values(ENEMIES).find(e => k.includes(e.name.toLowerCase()) || e.title.toLowerCase().includes(k));
+  // The enemy's name as a whole word of what was written ("Captain Wick", "Wick, the recruit"), not as a
+  // part of another word ("Storm Raider" isn't Tor)
+  const asWord = n => new RegExp(`(^|[^\\p{L}\\p{N}])${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}])`, 'u');
+  const hit = Object.values(ENEMIES).find(e => asWord(e.name).test(k));
   if (hit) return hit;
   // generic fallback for improvised foes
   return { name: name.trim(), title: 'stranger', faction: 'N', boss: false, hp: 40, atk: 5, def_: 2, generic: true,
@@ -122,6 +125,7 @@ function findEnemy(name) {
 }
 
 function startBattle(name, redemption = false) {
+  if (!String(name).trim()) return toast('Say who to fight: /battle Wick');
   if (B) return toast('A battle is already running.');
   const s = S(), e = findEnemy(name), lv = lvOf(s.exp);
   if (s.dead.includes(e.name)) return toast(`${e.name} is already dead.`);
