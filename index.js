@@ -17,6 +17,8 @@ const FACTION = { L: 'Lockwright', C: 'Compact', Q: 'Quiet Office', N: 'Unaligne
 const GOAL = 0.06, PERFECT = 0.012, FADE = 0.035, MIN_EARLY = 0.15;
 
 const ctx = () => SillyTavern.getContext();
+// Names of items and enemies come from the AI's text: wherever one goes into HTML, it goes through this
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 // ---------------- state ----------------
 function defaultState() {
@@ -54,7 +56,7 @@ function refreshHud() {
   const el = document.getElementById('vael-hud'); if (!el) return;
   const s = S(), lv = lvOf(s.exp);
   el.innerHTML = `<b>LV ${lv}</b> ${STAGES[lv]}<br>HP ${s.hp}/${maxHp(lv)} · EXP ${s.exp}<br>Kills ${s.kills}/50` +
-    (s.items.length ? `<br><span class="vael-dim">${s.items.join(', ')}</span>` : '');
+    (s.items.length ? `<br><span class="vael-dim">${esc(s.items.join(', '))}</span>` : '');
 }
 function buildHud() {
   if (document.getElementById('vael-hud')) return;
@@ -129,12 +131,12 @@ function startBattle(name, redemption = false) {
   try { document.activeElement?.blur(); } catch {}
   renderBattle();
   say(redemption
-    ? `* Everything slows.<br>* The bell sways above you. It doesn't ring.<br>* For the first time in a long time, you smell yourself.`
+    ? `* Everything slows.\n* The bell sways above you. It doesn't ring.\n* For the first time in a long time, you smell yourself.`
     : `* ${e.name} blocks the way.${e.boss ? '' : ''}`);
   menu();
 }
 
-function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
+function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
 
 function renderBattle() {
   const o = el('div', 'vael-overlay'); o.id = 'vael-overlay';
@@ -144,6 +146,7 @@ function renderBattle() {
         <div class="vael-ehp"><div class="vael-ehp-fill"></div></div></div>
       <div class="vael-stage"></div>
       <div class="vael-text"></div>
+      <div class="vael-note vael-dim"></div>
       <div class="vael-player"></div>
       <div class="vael-menu"></div>
     </div>`;
@@ -164,7 +167,8 @@ function updateBars() {
   $('.vael-ehp-fill').style.width = Math.max(0, B.hp / B.e.hp * 100) + '%';
   $('.vael-player').innerHTML = `LV ${lv} &nbsp; HP <span class="vael-php"><span style="width:${s.hp / maxHp(lv) * 100}%"></span></span> ${s.hp}/${maxHp(lv)}`;
 }
-function say(html) { $('.vael-text').innerHTML = html; }
+// The text box shows plain text; lines are separated by \n (the box keeps line breaks)
+function say(text) { $('.vael-text').textContent = text; }
 function spareable() {
   if (B.redemptionLive) return true;
   return B.pts >= 100 || (!B.e.boss && B.hp <= B.e.hp * 0.25);
@@ -182,7 +186,7 @@ function menu() {
     sub(s.items.map((it, i) => [it, () => useItem(i)]));
   });
   btn('MERCY', () => sub([['Spare', doSpare], ...(B.e.boss ? [] : [['Flee', doFlee]])]), !mercyAllowed());
-  if (!mercyAllowed()) say(($('.vael-text').innerHTML || '') + '<br><span class="vael-dim">* Mercy isn\'t for you anymore.</span>');
+  $('.vael-note').textContent = mercyAllowed() ? '' : '* Mercy isn\'t for you anymore.';
 }
 function sub(opts) {
   const m = $('.vael-menu'); m.innerHTML = '';
@@ -199,24 +203,24 @@ function endPlayerTurn(text) {
 
 function doCheck() {
   const e = B.e;
-  endPlayerTurn(`* ${e.name.toUpperCase()} · ATK ${e.atk} DEF ${e.def_}<br>* ${e.title}.${e.why ? ' ' + e.why + '.' : ''}`);
+  endPlayerTurn(`* ${e.name.toUpperCase()} · ATK ${e.atk} DEF ${e.def_}\n* ${e.title}.${e.why ? ' ' + e.why + '.' : ''}`);
 }
 function doAct(a) {
   B.pts += a.pts;
-  endPlayerTurn(`* You chose: ${a.label}.<br>* ${a.text}` + (spareable() ? `<br>* ${B.e.name} seems ready to stop.` : ''));
+  endPlayerTurn(`* You chose: ${a.label}.\n* ${a.text}` + (spareable() ? `\n* ${B.e.name} seems ready to stop.` : ''));
 }
 function useItem(i) {
   const s = S(), name = s.items[i], heal = ITEMS[name.toLowerCase()] ?? 10, lv = lvOf(s.exp);
   s.items.splice(i, 1); s.hp = Math.min(maxHp(lv), s.hp + heal); save();
-  endPlayerTurn(`* You ate the ${name}.<br>* You recovered ${heal} HP.`);
+  endPlayerTurn(`* You ate the ${name}.\n* You recovered ${heal} HP.`);
 }
 function doSpare() {
-  if (!spareable()) return endPlayerTurn(`* You spared ${B.e.name}.<br>* ...But they aren't ready to stop.`);
+  if (!spareable()) return endPlayerTurn(`* You spared ${B.e.name}.\n* ...But they aren't ready to stop.`);
   finish('spared');
 }
 function doFlee() {
   if (Math.random() < 0.5) return finish('fled');
-  endPlayerTurn('* You tried to flee.<br>* ...You couldn\'t get away.');
+  endPlayerTurn('* You tried to flee.\n* ...You couldn\'t get away.');
 }
 
 // ----- FIGHT: attack bar -----
