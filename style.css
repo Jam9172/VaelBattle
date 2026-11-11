@@ -1,7 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-#vael-hud{position:fixed;top:56px;right:10px;z-index:3000;background:#000;color:#fff;border:2px solid #fff;
-  font:9px/1.7 'Press Start 2P',monospace;padding:8px 10px;cursor:pointer;max-width:220px;opacity:.9}
-#vael-hud.vael-min{max-height:16px;overflow:hidden}
+/* The HUD: a bar in the page flow above the message box (never floating over other controls) */
+#vael-hud{box-sizing:border-box;width:100%;background:#000;color:#fff;border:2px solid #fff;
+  font:9px/1.7 'Press Start 2P',monospace;padding:4px 10px;cursor:pointer;opacity:.9;white-space:normal;overflow-wrap:anywhere}
+#vael-hud[hidden]{display:none}
+#vael-hud.vael-min .vael-more{display:none}
 .vael-dim{color:#888}
 /* Sized by the viewport: on phones SillyTavern's <html> has no height, and "inset:0" is measured against it */
 .vael-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;box-sizing:border-box;z-index:5000;

@@ -70,15 +70,24 @@ function refreshHud() {
   const s = peek();
   el.hidden = !s; if (!s) return;
   const lv = lvOf(s.exp);
-  el.innerHTML = `<b>LV ${lv}</b> ${STAGES[lv]}<br>HP ${s.hp}/${maxHp(lv)} · EXP ${s.exp}<br>Kills ${s.kills}/50` +
-    (s.items.length ? `<br><span class="vael-dim">${esc(s.items.join(', '))}</span>` : '');
+  el.innerHTML = `<b>LV ${lv}</b> <span class="vael-more">${STAGES[lv]} · HP ${s.hp}/${maxHp(lv)} · EXP ${s.exp} · Kills ${s.kills}/50` +
+    (s.items.length ? ` · <span class="vael-dim">${esc(s.items.join(', '))}</span>` : '') + '</span>';
 }
+// The HUD is a bar in the page's own flow, above the message box, so it never sits on top of other
+// controls (as a floating box it covered message buttons and other extensions' panels)
 function buildHud() {
   if (document.getElementById('vael-hud')) return;
   const el = document.createElement('div'); el.id = 'vael-hud';
   el.title = 'Vael Battle status (click to collapse)';
-  el.addEventListener('click', () => el.classList.toggle('vael-min'));
-  document.body.appendChild(el); refreshHud();
+  const remembered = () => { try { return localStorage.getItem('vael_hud_min') === '1'; } catch { return false; } };
+  el.classList.toggle('vael-min', remembered());
+  el.addEventListener('click', () => {
+    const min = el.classList.toggle('vael-min');
+    try { localStorage.setItem('vael_hud_min', min ? '1' : '0'); } catch { /* storage unavailable */ }
+  });
+  const form = document.getElementById('form_sheld');
+  if (form) form.prepend(el); else document.body.appendChild(el);
+  refreshHud();
 }
 
 // ---------------- chat I/O ----------------
