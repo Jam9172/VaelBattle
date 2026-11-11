@@ -334,7 +334,7 @@ async function finish(outcome) {
                  fled: `{{user}} FLED from ${e.name}.`,
                  defeated: `{{user}} was DEFEATED by ${e.name}. He is not dead: narrate capture, being left for dead, or rescue.` }[outcome];
   const text = `[BATTLE RESULT] ${verb} Kills: ${s.kills}/50 · LV ${lv} (${STAGES[lv]}) · HP ${s.hp}/${maxHp(lv)}.` +
-    (ms.length ? ' MILESTONE: ' + ms.join(' MILESTONE: ') : '') + ' Narrate the aftermath, then give the choices.';
+    (ms.length ? ' MILESTONE: ' + ms.join(' MILESTONE: ') : '') + ' Narrate the aftermath. Give a choice menu only if a MILESTONE is listed or this is a key story moment; otherwise let the player respond freely.';
   const o = document.getElementById('vael-overlay');
   say({ killed: `* ${e.name} falls.`, spared: `* You spared ${e.name}.`, fled: '* You got away.', defeated: '* You fall.' }[outcome]);
   $('.vael-menu').innerHTML = ''; $('.vael-stage').innerHTML = '';
