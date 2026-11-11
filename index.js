@@ -97,6 +97,18 @@ function scanMessage(id) {
 // ---------------- battle ----------------
 let B = null; // current battle
 
+// While a battle is open, swallow keyboard input in the capture phase so SillyTavern
+// never sees it (arrow keys would otherwise swipe messages), and route it to the battle.
+let onKeyDown = null, onKeyUp = null;
+function battleKeys(ev, handler) {
+  if (!B) return;
+  if (ev.key === 'Escape' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation();
+  handler?.(ev);
+}
+window.addEventListener('keydown', ev => battleKeys(ev, onKeyDown), true);
+window.addEventListener('keyup', ev => battleKeys(ev, onKeyUp), true);
+
 function findEnemy(name) {
   const k = name.trim().toLowerCase();
   if (ENEMIES[k]) return ENEMIES[k];
@@ -114,6 +126,7 @@ function startBattle(name, redemption = false) {
   s.hp = maxHp(lv); save(); // every battle starts at full HP
   B = { e, hp: e.hp, pts: e.name === 'Orphan' ? 100 : 0, turn: 0, redemption, redemptionLive: redemption,
         lv, log: [] };
+  try { document.activeElement?.blur(); } catch {}
   renderBattle();
   say(redemption
     ? `* Everything slows.<br>* The bell sways above you. It doesn't ring.<br>* For the first time in a long time, you smell yourself.`
@@ -220,7 +233,7 @@ function fightPhase() {
   };
   const strike = () => {
     if (!running) return; running = false;
-    document.removeEventListener('keydown', key); wrap.removeEventListener('pointerdown', strike);
+    onKeyDown = null; wrap.removeEventListener('pointerdown', strike);
     const d = pos - GOAL; let m, crit = false;
     if (Math.abs(d) <= PERFECT) { m = 1; crit = true; }
     else if (d > 0) { const t = (d - PERFECT) / (1 - GOAL - PERFECT); m = 1 - (1 - MIN_EARLY) * t; }
@@ -238,7 +251,7 @@ function fightPhase() {
     }, 900);
   };
   const key = ev => { if (['z', 'Z', 'Enter', ' '].includes(ev.key)) { ev.preventDefault(); strike(); } };
-  document.addEventListener('keydown', key); wrap.addEventListener('pointerdown', strike);
+  onKeyDown = key; wrap.addEventListener('pointerdown', strike);
   place(); requestAnimationFrame(tick);
 }
 
@@ -257,7 +270,7 @@ function enemyTurn() {
   const ku = ev => { keys[ev.key.toLowerCase()] = false; };
   const pm = ev => { if (ev.buttons || ev.pointerType === 'touch') { const r = cv.getBoundingClientRect();
     soul.x = (ev.clientX - r.left) / r.width * cv.width; soul.y = (ev.clientY - r.top) / r.height * cv.height; } };
-  document.addEventListener('keydown', kd); document.addEventListener('keyup', ku);
+  onKeyDown = kd; onKeyUp = ku;
   cv.addEventListener('pointermove', pm); cv.addEventListener('pointerdown', pm);
   cv.style.touchAction = 'none';
   const pattern = Math.floor(Math.random() * 3);
@@ -292,7 +305,7 @@ function enemyTurn() {
     if (now - t0 > dur) { stop(); return backToMenu(); }
     requestAnimationFrame(frame);
   }
-  function stop() { running = false; document.removeEventListener('keydown', kd); document.removeEventListener('keyup', ku); }
+  function stop() { running = false; onKeyDown = null; onKeyUp = null; }
   requestAnimationFrame(frame);
 }
 function drawSoul(g, x, y, blink) {
