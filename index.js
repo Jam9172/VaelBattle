@@ -147,7 +147,12 @@ function renderBattle() {
       <div class="vael-player"></div>
       <div class="vael-menu"></div>
     </div>`;
+  // Touch drags and gesture events must never reach SillyTavern's swipe handlers.
+  for (const t of ['touchstart', 'touchmove', 'touchend', 'touchcancel',
+                   'swiped', 'swiped-left', 'swiped-right', 'swiped-up', 'swiped-down'])
+    o.addEventListener(t, ev => ev.stopPropagation(), { passive: true });
   document.body.appendChild(o);
+  document.body.classList.add('vael-in-battle');
   updateBars();
 }
 const $ = q => document.querySelector('#vael-overlay ' + q);
@@ -352,7 +357,7 @@ async function finish(outcome) {
   say({ killed: `* ${e.name} falls.`, spared: `* You spared ${e.name}.`, fled: '* You got away.', defeated: '* You fall.' }[outcome]);
   $('.vael-menu').innerHTML = ''; $('.vael-stage').innerHTML = '';
   setTimeout(async () => {
-    o?.remove(); B = null;
+    o?.remove(); B = null; document.body.classList.remove('vael-in-battle');
     try { await postResult(text); } catch (err) { console.error(EXT, err); toast('Could not post the result. ' + err.message); }
   }, 1400);
 }

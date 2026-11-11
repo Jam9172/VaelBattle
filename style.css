@@ -29,3 +29,6 @@
 .vael-slider.vael-hit{background:#fff}.vael-slider.vael-fade{opacity:0;transition:opacity .35s}
 .vael-dmg{height:22px;font-size:14px}.vael-crit{color:#f5c542}.vael-red{color:#ff3b3b}
 .vael-box{width:min(360px,100%);aspect-ratio:3/2;border:3px solid #fff;image-rendering:pixelated;background:#000}
+
+/* No message swiping while a battle is open: SillyTavern only swipes when these are visible. */
+body.vael-in-battle .swipe_left,body.vael-in-battle .swipe_right{display:none!important}
