@@ -21,15 +21,26 @@ const ctx = () => SillyTavern.getContext();
 const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 // ---------------- state ----------------
+// `grants` remembers which items each reply gave (message id -> names), so a swipe, Regenerate or delete
+// can take back what the replaced text gave. `on` marks a chat as a Vael chat.
 function defaultState() {
-  return { kills: 0, exp: 0, hp: 20, fk: { L: 0, C: 0, Q: 0, N: 0 }, dead: [], spared: [],
-           items: [], handled: [], milestones: {} };
+  return { on: true, kills: 0, exp: 0, hp: 20, fk: { L: 0, C: 0, Q: 0, N: 0 }, dead: [], spared: [],
+           items: [], grants: {}, handled: [], milestones: {} };
 }
+// This chat's state, or null if it isn't a Vael chat. Never writes anything: other chats are left alone.
+// (Earlier versions wrote an empty state into every chat that was opened; one without progress doesn't count.)
+function peek() {
+  const s = ctx().chatMetadata?.[EXT];
+  return s && (s.on || s.kills || s.exp || s.items?.length || s.dead?.length || s.spared?.length) ? s : null;
+}
+// This chat's state, started if need be. Only called when something Vael happens here: a tag in a reply,
+// a battle, or one of the commands.
 function S() {
   const md = ctx().chatMetadata;
   if (!md) return defaultState();
-  if (!md[EXT]) md[EXT] = defaultState();
-  return md[EXT];
+  const s = md[EXT] ||= defaultState();
+  s.on = true; s.grants ||= {};
+  return s;
 }
 function save() {
   const c = ctx();
@@ -42,19 +53,23 @@ const pAtk = lv => 10 + 4 * lv;
 const pDef = lv => Math.floor(lv / 2);
 
 // ---------------- prompt + HUD ----------------
-function statusText() {
-  const s = S(), lv = lvOf(s.exp);
+function statusText(s = S()) {
+  const lv = lvOf(s.exp);
   return `[VAEL STATUS] Kills: ${s.kills}/50 · EXP: ${s.exp} · LV ${lv} (${STAGES[lv]}) · HP ${s.hp}/${maxHp(lv)}` +
     ` · Kills by faction: Lockwright ${s.fk.L}, Compact ${s.fk.C}, Quiet Office ${s.fk.Q}, Unaligned ${s.fk.N}` +
     ` · Dead: ${s.dead.join(', ') || 'none'} · Spared: ${s.spared.join(', ') || 'none'}` +
     ` · Items: ${s.items.join(', ') || 'none'}`;
 }
+// The status goes to the AI, and the HUD shows, only in a Vael chat
 function refreshPrompt() {
-  try { ctx().setExtensionPrompt(EXT, statusText(), 1, 1); } catch (e) { console.warn(EXT, e); }
+  const s = peek();
+  try { ctx().setExtensionPrompt(EXT, s ? statusText(s) : '', 1, 1); } catch (e) { console.warn(EXT, e); }
 }
 function refreshHud() {
   const el = document.getElementById('vael-hud'); if (!el) return;
-  const s = S(), lv = lvOf(s.exp);
+  const s = peek();
+  el.hidden = !s; if (!s) return;
+  const lv = lvOf(s.exp);
   el.innerHTML = `<b>LV ${lv}</b> ${STAGES[lv]}<br>HP ${s.hp}/${maxHp(lv)} · EXP ${s.exp}<br>Kills ${s.kills}/50` +
     (s.items.length ? `<br><span class="vael-dim">${esc(s.items.join(', '))}</span>` : '');
 }
@@ -84,16 +99,35 @@ function addItem(name) {
 function toast(msg) { try { toastr.info(msg, 'Vael'); } catch { console.log(EXT, msg); } }
 
 function hash(str) { let h = 0; for (const ch of str) h = (h * 31 + ch.charCodeAt(0)) | 0; return h; }
-function scanMessage(id) {
-  const c = ctx(), m = c.chat?.[id];
-  if (!m || m.is_user || !m.mes) return;
+// Makes what reply `id` gave match `names`: what its earlier text gave is taken back first
+function regrant(id, names) {
+  const before = ctx().chatMetadata?.[EXT]?.grants?.[id] || [];
+  if (before.join('\n') === names.join('\n')) return;
+  const s = S();
+  for (const name of before) { const i = s.items.lastIndexOf(name); if (i !== -1) s.items.splice(i, 1); }
+  s.items.push(...names);
+  if (names.length) s.grants[id] = names; else delete s.grants[id];
+  save();
+  names.forEach(name => toast(`Got ${name}`));
+}
+// Reads the tags in the text reply `id` shows. Called for a new reply (which may start a battle) and when
+// the shown text changes (a swipe or an edit), so its items always match what is on screen.
+function scanMessage(id, { newReply = false } = {}) {
+  const m = ctx().chat?.[id];
+  if (!m || m.is_user || typeof m.mes !== 'string') return;
+  regrant(id, [...m.mes.matchAll(/\[ITEM:\s*([^\]]+)\]/gi)].map(it => it[1].trim()).filter(Boolean));
+  const b = newReply && m.mes.match(/\[BATTLE:\s*([^\]|]+?)\s*(?:\|\s*(redemption))?\s*\]/i);
+  if (!b) return;
   const s = S(), sig = `${id}:${hash(m.mes)}`;
   if (s.handled.includes(sig)) return;
   s.handled.push(sig); if (s.handled.length > 300) s.handled.shift();
-  for (const it of m.mes.matchAll(/\[ITEM:\s*([^\]]+)\]/gi)) addItem(it[1]);
-  const b = m.mes.match(/\[BATTLE:\s*([^\]|]+?)\s*(?:\|\s*(redemption))?\s*\]/i);
   save();
-  if (b) startBattle(b[1], !!b[2]);
+  startBattle(b[1], !!b[2]);
+}
+// Replies that are gone (deleted, or about to be regenerated) take their items with them
+function dropGrantsOfDeleted() {
+  const length = ctx().chat?.length ?? 0;
+  for (const id of Object.keys(ctx().chatMetadata?.[EXT]?.grants || {})) if (Number(id) >= length) regrant(id, []);
 }
 
 // ---------------- battle ----------------
@@ -376,7 +410,8 @@ function registerCommands() {
   const cmds = [
     ['battle', (args, value) => { const v = String(value || ''); const red = /redemption/i.test(v); startBattle(v.replace(/redemption/i, '').trim(), red); return ''; },
      'Start a Vael battle: /battle Wick (add "redemption" for the Last Mercy)'],
-    ['vael', () => { toast(statusText()); return statusText(); }, 'Show Vael kills, LV, HP and items'],
+    ['vael', () => { const text = statusText(); save(); toast(text); return text; }, 'Show Vael kills, LV, HP and items (and make this a Vael chat)'],
+    ['vaeloff', () => { const md = ctx().chatMetadata; if (md) delete md[EXT]; save(); toast('Vael Battle is off for this chat.'); return ''; }, 'Turn Vael Battle off for this chat (forgets its Vael state)'],
     ['vaelitem', (args, value) => { addItem(String(value)); return ''; }, 'Add an item: /vaelitem Bread'],
     ['vaelset', (args, value) => { const s = S(); const m = String(value).match(/(\d+)\s+(\d+)/); if (m) { s.kills = +m[1]; s.exp = +m[2]; save(); } return statusText(); }, 'Set kills and EXP manually: /vaelset 12 30'],
     ['vaelreset', () => { ctx().chatMetadata[EXT] = defaultState(); save(); toast('Vael state reset for this chat.'); return ''; }, 'Reset Vael state for this chat'],
@@ -394,7 +429,10 @@ function registerCommands() {
 (function init() {
   const c = ctx();
   buildHud(); refreshPrompt(); registerCommands();
-  c.eventSource.on(c.event_types.MESSAGE_RECEIVED, id => setTimeout(() => scanMessage(id), 50));
+  c.eventSource.on(c.event_types.MESSAGE_RECEIVED, id => setTimeout(() => scanMessage(id, { newReply: true }), 50));
+  for (const shownTextChanged of [c.event_types.MESSAGE_SWIPED, c.event_types.MESSAGE_EDITED])
+    c.eventSource.on(shownTextChanged, id => setTimeout(() => scanMessage(id), 50));
+  c.eventSource.on(c.event_types.MESSAGE_DELETED, () => setTimeout(dropGrantsOfDeleted, 50));
   c.eventSource.on(c.event_types.CHAT_CHANGED, () => { refreshHud(); refreshPrompt(); });
   console.log(EXT, 'loaded');
 })();
